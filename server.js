@@ -14,9 +14,9 @@ app.use((req, res, next) => {
 // Rutas
 app.use('/api', require('./routes/download'));
 
-// Health check
+// Health check — sin exponer puerto ni info interna
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'API DevMatrixs corriendo 🚀', port: PORT });
+  res.json({ status: 'ok', message: 'API DevMatrixs 🚀' });
 });
 
 app.listen(PORT, () => {
