@@ -3,21 +3,21 @@
 // Rutas del módulo de IA
 // ═══════════════════════════════════════════════════════════
 
-const express      = require('express');
-const router       = express.Router();
+const express = require('express');
+const router  = express.Router();
 const { chat, models } = require('../controllers/aiController');
+const auth    = require('../middleware/auth');
 
-// Rate limiting simple sin dependencias externas
+// Rate limiting por IP (capa extra sobre el límite de plan)
 const requestCounts = new Map();
 function rateLimit(req, res, next) {
   const ip  = req.ip || req.headers['x-forwarded-for'] || 'unknown';
   const now = Date.now();
-  const key = `${ip}-${Math.floor(now / 60000)}`; // ventana de 1 minuto
+  const key = `${ip}-${Math.floor(now / 60000)}`;
 
   const count = (requestCounts.get(key) || 0) + 1;
   requestCounts.set(key, count);
 
-  // Limpiar entradas viejas cada 1000 requests
   if (requestCounts.size > 1000) {
     const cutoff = Math.floor(now / 60000) - 2;
     for (const k of requestCounts.keys()) {
@@ -25,16 +25,16 @@ function rateLimit(req, res, next) {
     }
   }
 
-  if (count > 30) { // máximo 30 requests por minuto por IP
+  if (count > 30) {
     return res.status(429).json({ ok: false, error: 'Demasiadas solicitudes. Espera un momento.' });
   }
   next();
 }
 
-// POST /api/ai/chat  — enviar mensaje y recibir respuesta
-router.post('/chat', rateLimit, chat);
+// POST /api/ai/chat  — enviar mensaje
+router.post('/chat', auth, rateLimit, chat);
 
-// GET  /api/ai/models — listar modelos disponibles
-router.get('/models', models);
+// GET  /api/ai/models — listar modelos
+router.get('/models', auth, models);
 
 module.exports = router;

@@ -2,9 +2,16 @@
 // server.js — API DevMatrixs
 // ═══════════════════════════════════════════════════════════
 
-const express = require('express');
-const app     = express();
-const PORT    = process.env.PORT || 2090;
+require('dotenv').config();
+const express  = require('express');
+const mongoose = require('mongoose');
+const app      = express();
+const PORT     = process.env.PORT || 3001;
+
+// ── MongoDB ───────────────────────────────────────────────
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB conectado'))
+  .catch(err => console.error('❌ MongoDB error:', err));
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -12,7 +19,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin',  '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-api-key');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
@@ -26,12 +33,14 @@ app.get('/', (req, res) => {
   res.json({
     status:  'ok',
     message: 'API DevMatrixs 🚀',
-    version: '2.0.0',
+    version: '2.1.0',
     endpoints: {
-      download: 'POST /api/download',
-      ai_chat:  'POST /api/ai/chat',
-      ai_models:'GET  /api/ai/models',
+      download:  'POST /api/download',
+      ai_chat:   'POST /api/ai/chat',
+      ai_models: 'GET  /api/ai/models',
+      ai_image:  'POST /api/ai/image',
     },
+    auth: 'Se requiere x-api-key header. Genera tu key en devmatrixs.lat',
   });
 });
 
@@ -41,5 +50,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 API DevMatrixs v2 corriendo en puerto ${PORT}`);
+  console.log(`🚀 API DevMatrixs v2.1 corriendo en puerto ${PORT}`);
 });
