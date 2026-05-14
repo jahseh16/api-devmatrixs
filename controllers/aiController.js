@@ -9,20 +9,22 @@ const MAX_MESSAGES  = 20;
 const MAX_TOKENS    = 1024;
 const DEFAULT_MODEL = 'deepseek-v3-cb';
 
-// Modelos públicos (sin revelar el provider interno)
+// Modelos públicos
 const PUBLIC_MODELS = [
-  'fast',      // llama rápido
-  'balanced',  // deepseek equilibrado
-  'smart',     // deepseek más potente
-  'creative',  // mixtral
+  'fast',       // llama rápido
+  'balanced',   // deepseek equilibrado  
+  'smart',      // deepseek más potente
+  'creative',   // mixtral
+  'reasoning',  // deepseek r1 (razonamiento)
 ];
 
-// Mapa interno (oculto al usuario)
+// Mapa interno
 const MODEL_MAP = {
   fast:      { provider: 'groq',      model: 'llama3-8b' },
   balanced:  { provider: 'sambanova', model: 'deepseek-v3-cb' },
   smart:     { provider: 'sambanova', model: 'deepseek-v3' },
   creative:  { provider: 'groq',      model: 'mixtral' },
+  reasoning: { provider: 'sambanova', model: 'deepseek-r1' },  // <-- agrega esto
 };
 
 async function chat(req, res) {
