@@ -1,73 +1,68 @@
 // ═══════════════════════════════════════════════════════════
 // controllers/aiController.js
-// Controlador principal de IA — soporta SambaNova y Groq
-// con fallback automático y streaming SSE
 // ═══════════════════════════════════════════════════════════
 
 const { callSambaNova } = require('../services/sambanova.service');
 const { callGroq }      = require('../services/groq.service');
 
-// ── Configuración global ──────────────────────────────────
-const MAX_MESSAGES  = 20;    // máximo de mensajes en el contexto
-const MAX_TOKENS    = 1024;  // máximo de tokens de salida
-const DEFAULT_MODEL = 'deepseek-v3-cb';  // modelo por defecto (barato y bueno)
+const MAX_MESSAGES  = 20;
+const MAX_TOKENS    = 1024;
+const DEFAULT_MODEL = 'deepseek-v3-cb';
 
-/**
- * POST /api/ai/chat
- * Body: { messages, model?, provider?, stream? }
- *
- * providers disponibles: 'sambanova' | 'groq' | 'auto'
- * 'auto' → intenta SambaNova primero, si falla usa Groq
- */
+// Modelos públicos (sin revelar el provider interno)
+const PUBLIC_MODELS = [
+  'fast',      // llama rápido
+  'balanced',  // deepseek equilibrado
+  'smart',     // deepseek más potente
+  'creative',  // mixtral
+];
+
+// Mapa interno (oculto al usuario)
+const MODEL_MAP = {
+  fast:      { provider: 'groq',      model: 'llama3-8b' },
+  balanced:  { provider: 'sambanova', model: 'deepseek-v3-cb' },
+  smart:     { provider: 'sambanova', model: 'deepseek-v3' },
+  creative:  { provider: 'groq',      model: 'mixtral' },
+};
+
 async function chat(req, res) {
   try {
     const {
       messages,
-      model    = DEFAULT_MODEL,
-      provider = 'auto',
+      model    = 'balanced',
       stream   = false,
     } = req.body;
 
-    // ── Validaciones básicas ──────────────────────────────
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ ok: false, error: 'Se requiere un array de messages no vacío.' });
     }
 
-    // Limitar contexto para no gastar tokens de más
-    const context = messages.slice(-MAX_MESSAGES);
+    const context  = messages.slice(-MAX_MESSAGES);
+    const resolved = MODEL_MAP[model] || MODEL_MAP['balanced'];
 
-    // ── Streaming SSE ─────────────────────────────────────
     if (stream) {
       res.setHeader('Content-Type',  'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection',    'keep-alive');
       res.flushHeaders();
-
       try {
-        const response = await _callProvider({ provider, messages: context, model, stream: true, maxTokens: MAX_TOKENS });
-        // Pipe directo del stream de la API al cliente
-        for await (const chunk of response.body) {
-          res.write(chunk);
-        }
+        const response = await _callProvider({ ...resolved, messages: context, stream: true, maxTokens: MAX_TOKENS });
+        for await (const chunk of response.body) res.write(chunk);
       } catch (err) {
         res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
       }
       return res.end();
     }
 
-    // ── Respuesta completa (no streaming) ─────────────────
-    const response = await _callProvider({ provider, messages: context, model, stream: false, maxTokens: MAX_TOKENS });
+    const response = await _callProvider({ ...resolved, messages: context, stream: false, maxTokens: MAX_TOKENS });
     const data     = await response.json();
-
-    const content    = data.choices?.[0]?.message?.content ?? '';
-    const usage      = data.usage ?? {};
-    const usedModel  = data.model ?? model;
+    const content  = data.choices?.[0]?.message?.content ?? '';
+    const usage    = data.usage ?? {};
 
     return res.json({
-      ok:       true,
+      ok:      true,
       content,
-      model:    usedModel,
-      provider: data._provider ?? provider,
+      model,   // devuelve el nombre público, no el interno
       usage: {
         prompt_tokens:     usage.prompt_tokens     ?? 0,
         completion_tokens: usage.completion_tokens ?? 0,
@@ -81,37 +76,27 @@ async function chat(req, res) {
   }
 }
 
-/**
- * Devuelve todos los modelos disponibles por provider
- * GET /api/ai/models
- */
+// GET /api/ai/models — solo muestra nombres públicos
 function models(req, res) {
-  const { SAMBANOVA_MODELS } = require('../services/sambanova.service');
-  const { GROQ_MODELS }      = require('../services/groq.service');
   res.json({
-    ok: true,
-    providers: {
-      sambanova: Object.keys(SAMBANOVA_MODELS),
-      groq:      Object.keys(GROQ_MODELS),
+    ok:     true,
+    models: PUBLIC_MODELS,
+    usage:  {
+      today: req.apiKey?.requestsToday || 0,
+      limit: req.apiKey?.plan === 'pro' ? 1000 : 50,
+      plan:  req.apiKey?.plan || 'free',
     },
   });
 }
 
-// ── Helper interno: selecciona provider con fallback ──────
 async function _callProvider({ provider, messages, model, stream, maxTokens }) {
   if (provider === 'groq') {
-    return callGroq({ messages, model: 'llama3-70b', stream, maxTokens });
+    return callGroq({ messages, model, stream, maxTokens });
   }
-
-  if (provider === 'sambanova') {
-    return callSambaNova({ messages, model, stream, maxTokens });
-  }
-
-  // 'auto': intenta SambaNova primero, fallback a Groq
   try {
     return await callSambaNova({ messages, model, stream, maxTokens });
-  } catch (errSamba) {
-    console.warn('[aiController] SambaNova falló, usando Groq como fallback:', errSamba.message);
+  } catch (err) {
+    console.warn('[aiController] SambaNova falló, fallback a Groq:', err.message);
     return callGroq({ messages, model: 'llama3-70b', stream, maxTokens });
   }
 }
