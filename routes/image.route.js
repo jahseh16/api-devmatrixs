@@ -1,16 +1,13 @@
 // ═══════════════════════════════════════════════════════════
-// routes/download.js
+// routes/image.route.js
 // ═══════════════════════════════════════════════════════════
 
 const express = require('express');
 const router  = express.Router();
-const { handleDownload } = require('../controllers/downloadController');
-const auth = require('../middleware/auth');
+const { image } = require('../controllers/imageController');
+const auth    = require('../middleware/auth');
 
-// POST /api/download — protegido por API key
-router.post('/download', auth, handleDownload);
-
-// GET /api/download — protegido por API key  
-router.get('/download', auth, handleDownload);
+// POST /api/image — generar imagen con Pollinations
+router.post('/', auth, image);
 
 module.exports = router;

@@ -25,22 +25,23 @@ app.use((req, res, next) => {
 });
 
 // ── Rutas ─────────────────────────────────────────────────
-app.use('/api',    require('./routes/download'));
-app.use('/api/ai', require('./routes/ai.route'));
+app.use('/api',        require('./routes/download'));
+app.use('/api/ai',     require('./routes/ai.route'));
+app.use('/api/image',  require('./routes/image.route'));
 
 // ── Health check ──────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     status:  'ok',
     message: 'API DevMatrixs 🚀',
-    version: '2.1.0',
+    version: '2.2.0',
     endpoints: {
-      download:  'POST /api/download',
       ai_chat:   'POST /api/ai/chat',
       ai_models: 'GET  /api/ai/models',
-      ai_image:  'POST /api/ai/image',
+      image:     'POST /api/image',
+      download:  'POST /api/download',
     },
-    auth: 'Se requiere x-api-key header. Genera tu key en devmatrixs.lat',
+    auth: 'Requiere x-api-key. Obtener en devmatrixs.lat',
   });
 });
 
@@ -50,5 +51,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 API DevMatrixs v2.1 corriendo en puerto ${PORT}`);
+  console.log(`🚀 API DevMatrixs v2.2 corriendo en puerto ${PORT}`);
 });
