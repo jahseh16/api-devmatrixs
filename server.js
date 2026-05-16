@@ -18,7 +18,7 @@ app.use(express.json({ limit: '1mb' }));
 // ── CORS ──────────────────────────────────────────────────
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin',  '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-api-key');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
@@ -28,20 +28,28 @@ app.use((req, res, next) => {
 app.use('/api',        require('./routes/download'));
 app.use('/api/ai',     require('./routes/ai.route'));
 app.use('/api/image',  require('./routes/image.route'));
+app.use('/api/auth',   require('./routes/auth.route'));
+app.use('/api/keys',   require('./routes/keys.route'));
 
 // ── Health check ──────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     status:  'ok',
     message: 'API DevMatrixs 🚀',
-    version: '2.2.0',
+    version: '2.3.0',
     endpoints: {
-      ai_chat:   'POST /api/ai/chat',
-      ai_models: 'GET  /api/ai/models',
-      image:     'POST /api/image',
-      download:  'POST /api/download',
+      ai_chat:        'POST   /api/ai/chat',
+      ai_models:      'GET    /api/ai/models',
+      image:          'POST   /api/image',
+      download:       'POST   /api/download',
+      auth_register:  'POST   /api/auth/register',
+      auth_login:     'POST   /api/auth/login',
+      auth_me:        'GET    /api/auth/me',
+      keys_generate:  'POST   /api/keys/generate',
+      keys_list:      'GET    /api/keys/list',
+      keys_delete:    'DELETE /api/keys/:id',
     },
-    auth: 'Requiere x-api-key. Obtener en devmatrixs.lat',
+    auth: 'Requiere x-api-key. Obtener en devmatrixs.lat/dashboard',
   });
 });
 
@@ -51,5 +59,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 API DevMatrixs v2.2 corriendo en puerto ${PORT}`);
+  console.log(`🚀 API DevMatrixs v2.3 corriendo en puerto ${PORT}`);
 });
