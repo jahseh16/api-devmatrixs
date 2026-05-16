@@ -2,105 +2,102 @@
 // routes/keys.route.js
 // ═══════════════════════════════════════════════════════════
 
-const express = require('express');
-const router  = express.Router();
-const crypto  = require('crypto');
-const jwt     = require('jsonwebtoken');
-const ApiKey  = require('../models/ApiKey');
+const express  = require('express');
+const jwt      = require('jsonwebtoken');
+const crypto   = require('crypto');
+const ApiKey   = require('../models/ApiKey');
+const User     = require('../models/User');
+const router   = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'devmatrixs_secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'devmatrix_secret_fallback';
 
-// ── Middleware: verificar JWT ─────────────────────────────
-function authRequired(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  if (!authHeader) return res.status(401).json({ ok: false, error: 'Token requerido.' });
-
+// ── Middleware: verificar JWT ──────────────────────────────
+async function requireAuth(req, res, next) {
   try {
-    const token   = authHeader.replace('Bearer ', '');
-    req.user      = jwt.verify(token, JWT_SECRET);
+    const authHeader = req.headers.authorization ?? '';
+    const token      = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return res.status(401).json({ ok: false, error: 'Autenticación requerida.' });
+
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user    = await User.findById(payload.id).select('-password');
+    if (!user) return res.status(401).json({ ok: false, error: 'Usuario no encontrado.' });
+
+    req.user = user;
     next();
   } catch {
-    res.status(401).json({ ok: false, error: 'Token inválido o expirado.' });
+    return res.status(401).json({ ok: false, error: 'Token inválido o expirado.' });
   }
 }
 
-// ── POST /api/keys/generate ───────────────────────────────
-// Genera una nueva API Key para el usuario autenticado
-router.post('/generate', authRequired, async (req, res) => {
+// ── POST /api/keys/generate ────────────────────────────────
+router.post('/generate', requireAuth, async (req, res) => {
   try {
-    // Límite: máximo 3 keys por usuario plan free
-    const existing = await ApiKey.find({ userId: req.user.id, isActive: true });
-    const limit    = req.user.plan === 'pro' ? 10 : 3;
+    const userId = req.user._id;
 
-    if (existing.length >= limit) {
-      return res.status(429).json({
-        ok: false,
-        error: `Límite de ${limit} API Keys alcanzado para tu plan ${req.user.plan}.`,
-      });
+    // Límite: máximo 5 keys por usuario en plan free
+    const count = await ApiKey.countDocuments({ userId });
+    if (req.user.plan === 'free' && count >= 5) {
+      return res.status(403).json({ ok: false, error: 'Límite de 5 API Keys alcanzado en el plan free.' });
     }
 
-    const key = 'dmx-' + crypto.randomBytes(24).toString('hex');
+    const rawKey = 'mk-' + crypto.randomBytes(24).toString('hex');
 
     const apiKey = await ApiKey.create({
-      key,
-      userId:   req.user.id,
+      key:      rawKey,
+      userId,
       username: req.user.username,
       plan:     req.user.plan,
     });
 
-    res.status(201).json({
-      ok:      true,
-      message: 'API Key generada exitosamente.',
-      apiKey: {
+    return res.status(201).json({
+      ok:  true,
+      key: {
         id:        apiKey._id,
-        key:       apiKey.key,
+        key:       rawKey,
         plan:      apiKey.plan,
-        isActive:  apiKey.isActive,
         createdAt: apiKey.createdAt,
       },
     });
+
   } catch (err) {
-    console.error('❌ generate key error:', err);
-    res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
+    console.error('[keys/generate]', err.message);
+    return res.status(500).json({ ok: false, error: 'Error generando la API Key.' });
   }
 });
 
-// ── GET /api/keys/list ────────────────────────────────────
-// Lista todas las API Keys del usuario autenticado
-router.get('/list', authRequired, async (req, res) => {
+// ── GET /api/keys/list ─────────────────────────────────────
+router.get('/list', requireAuth, async (req, res) => {
   try {
-    const keys = await ApiKey.find({ userId: req.user.id })
-      .select('-__v')
+    const keys = await ApiKey.find({ userId: req.user._id })
+      .select('key plan requests createdAt')
       .sort({ createdAt: -1 });
 
-    res.json({
-      ok:    true,
-      total: keys.length,
-      keys,
+    return res.json({
+      ok:   true,
+      keys: keys.map(k => ({
+        id:        k._id,
+        key:       k.key,
+        plan:      k.plan,
+        requests:  k.requests ?? 0,
+        createdAt: k.createdAt,
+      })),
     });
+
   } catch (err) {
-    console.error('❌ list keys error:', err);
-    res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
+    console.error('[keys/list]', err.message);
+    return res.status(500).json({ ok: false, error: 'Error obteniendo las API Keys.' });
   }
 });
 
-// ── DELETE /api/keys/:id ──────────────────────────────────
-// Desactiva (revoca) una API Key del usuario autenticado
-router.delete('/:id', authRequired, async (req, res) => {
+// ── DELETE /api/keys/:id ───────────────────────────────────
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
-    const apiKey = await ApiKey.findOne({ _id: req.params.id, userId: req.user.id });
-
-    if (!apiKey) {
-      return res.status(404).json({ ok: false, error: 'API Key no encontrada.' });
-    }
-
-    apiKey.isActive = false;
-    await apiKey.save();
-
-    res.json({ ok: true, message: 'API Key revocada exitosamente.' });
+    const key = await ApiKey.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    if (!key) return res.status(404).json({ ok: false, error: 'Key no encontrada.' });
+    return res.json({ ok: true, message: 'API Key eliminada.' });
   } catch (err) {
-    console.error('❌ delete key error:', err);
-    res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
+    console.error('[keys/delete]', err.message);
+    return res.status(500).json({ ok: false, error: 'Error eliminando la API Key.' });
   }
 });
 

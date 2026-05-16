@@ -3,13 +3,29 @@
 // ═══════════════════════════════════════════════════════════
 
 const express = require('express');
-const router  = express.Router();
 const jwt     = require('jsonwebtoken');
 const User    = require('../models/User');
+const router  = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'devmatrixs_secret';
+const JWT_SECRET  = process.env.JWT_SECRET  || 'devmatrix_secret_fallback';
+const JWT_EXPIRES = process.env.JWT_EXPIRES || '30d';
 
-// ── POST /api/auth/register ───────────────────────────────
+function signToken(userId) {
+  return jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+}
+
+function userPublic(user) {
+  return {
+    id:       user._id,
+    username: user.username,
+    email:    user.email,
+    plan:     user.plan,
+    requests: user.requests,
+    coins:    user.coins,
+  };
+}
+
+// ── POST /api/auth/register ────────────────────────────────
 router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -17,39 +33,31 @@ router.post('/register', async (req, res) => {
     if (!username || !email || !password) {
       return res.status(400).json({ ok: false, error: 'username, email y password son requeridos.' });
     }
-
-    // Verificar si ya existe
-    const exists = await User.findOne({ $or: [{ email }, { username }] });
-    if (exists) {
-      return res.status(409).json({ ok: false, error: 'El email o username ya está registrado.' });
+    if (username.length < 3) {
+      return res.status(400).json({ ok: false, error: 'El username debe tener mínimo 3 caracteres.' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ ok: false, error: 'La contraseña debe tener mínimo 6 caracteres.' });
     }
 
-    const user = await User.create({ username, email, password });
+    const exists = await User.findOne({ $or: [{ email }, { username }] });
+    if (exists) {
+      const field = exists.email === email ? 'email' : 'username';
+      return res.status(409).json({ ok: false, error: `El ${field} ya está en uso.` });
+    }
 
-    const token = jwt.sign(
-      { id: user._id, username: user.username, plan: user.plan },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const user  = await User.create({ username, email, password });
+    const token = signToken(user._id);
 
-    res.status(201).json({
-      ok: true,
-      message: 'Cuenta creada exitosamente.',
-      token,
-      user: {
-        id:       user._id,
-        username: user.username,
-        email:    user.email,
-        plan:     user.plan,
-      },
-    });
+    return res.status(201).json({ ok: true, token, user: userPublic(user) });
+
   } catch (err) {
-    console.error('❌ register error:', err);
-    res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
+    console.error('[auth/register]', err.message);
+    return res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
   }
 });
 
-// ── POST /api/auth/login ──────────────────────────────────
+// ── POST /api/auth/login ───────────────────────────────────
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -58,13 +66,9 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'email y password son requeridos.' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
       return res.status(401).json({ ok: false, error: 'Credenciales incorrectas.' });
-    }
-
-    if (!user.isActive) {
-      return res.status(403).json({ ok: false, error: 'Cuenta desactivada.' });
     }
 
     const valid = await user.comparePassword(password);
@@ -72,44 +76,35 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Credenciales incorrectas.' });
     }
 
-    const token = jwt.sign(
-      { id: user._id, username: user.username, plan: user.plan },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = signToken(user._id);
+    return res.json({ ok: true, token, user: userPublic(user) });
 
-    res.json({
-      ok: true,
-      message: 'Login exitoso.',
-      token,
-      user: {
-        id:       user._id,
-        username: user.username,
-        email:    user.email,
-        plan:     user.plan,
-      },
-    });
   } catch (err) {
-    console.error('❌ login error:', err);
-    res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
+    console.error('[auth/login]', err.message);
+    return res.status(500).json({ ok: false, error: 'Error interno del servidor.' });
   }
 });
 
-// ── GET /api/auth/me ──────────────────────────────────────
+// ── GET /api/auth/me ───────────────────────────────────────
 router.get('/me', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.status(401).json({ ok: false, error: 'Token requerido.' });
+    const authHeader = req.headers.authorization ?? '';
+    const token      = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
-    const token = authHeader.replace('Bearer ', '');
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    if (!token) {
+      return res.status(401).json({ ok: false, error: 'Token requerido.' });
+    }
 
-    if (!user) return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user    = await User.findById(payload.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+    }
 
-    res.json({ ok: true, user });
+    return res.json({ ok: true, user: userPublic(user) });
+
   } catch (err) {
-    res.status(401).json({ ok: false, error: 'Token inválido o expirado.' });
+    return res.status(401).json({ ok: false, error: 'Token inválido o expirado.' });
   }
 });
 
