@@ -6,7 +6,7 @@ require('dotenv').config();
 const express  = require('express');
 const mongoose = require('mongoose');
 const app      = express();
-const PORT     = process.env.PORT || 3002;
+const PORT     = process.env.PORT || 3001;
 
 // ── MongoDB ───────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI)
@@ -30,13 +30,14 @@ app.use('/api/ai',     require('./routes/ai.route'));
 app.use('/api/image',  require('./routes/image.route'));
 app.use('/api/auth',   require('./routes/auth.route'));
 app.use('/api/keys',   require('./routes/keys.route'));
+app.use('/api/chats',  require('./routes/chats.route'));
 
 // ── Health check ──────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     status:  'ok',
     message: 'API DevMatrixs 🚀',
-    version: '2.3.0',
+    version: '2.4.0',
     endpoints: {
       ai_chat:        'POST   /api/ai/chat',
       ai_models:      'GET    /api/ai/models',
@@ -48,16 +49,20 @@ app.get('/', (req, res) => {
       keys_generate:  'POST   /api/keys/generate',
       keys_list:      'GET    /api/keys/list',
       keys_delete:    'DELETE /api/keys/:id',
+      chats_save:     'POST   /api/chats',
+      chats_list:     'GET    /api/chats',
+      chats_get:      'GET    /api/chats/:id',
+      chats_delete:   'DELETE /api/chats/:id',
     },
-    auth: 'Requiere x-api-key. Obtener en devmatrixs.lat/dashboard',
+    auth: 'Requiere x-api-key o JWT. Obtener en devmatrixs.lat/dashboard',
   });
 });
 
-// ── 404 ───────────────────────────────────────────────────
+// ── 404 ──────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ ok: false, error: 'Ruta no encontrada.' });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 API DevMatrixs v2.3 corriendo en puerto ${PORT}`);
+  console.log(`🚀 API DevMatrixs v2.4 corriendo en puerto ${PORT}`);
 });
