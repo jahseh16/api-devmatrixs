@@ -10,8 +10,8 @@ const router  = express.Router();
 const JWT_SECRET  = process.env.JWT_SECRET  || 'devmatrix_secret_fallback';
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '30d';
 
-function signToken(userId) {
-  return jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+function signToken(user) {
+  return jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 }
 
 function userPublic(user) {
@@ -47,7 +47,7 @@ router.post('/register', async (req, res) => {
     }
 
     const user  = await User.create({ username, email, password });
-    const token = signToken(user._id);
+    const token = signToken(user);
 
     return res.status(201).json({ ok: true, token, user: userPublic(user) });
 
@@ -76,7 +76,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ ok: false, error: 'Credenciales incorrectas.' });
     }
 
-    const token = signToken(user._id);
+    const token = signToken(user);
     return res.json({ ok: true, token, user: userPublic(user) });
 
   } catch (err) {
