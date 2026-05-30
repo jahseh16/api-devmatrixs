@@ -4,6 +4,7 @@ const { downloadInstagram } = require('../services/instagram');
 
 /**
  * Detecta la plataforma por la URL y llama al servicio correcto.
+ * Acepta ?url= (GET) o body.url (POST) para compatibilidad con el Dashboard.
  * Respuesta estandarizada:
  * {
  *   success: true,
@@ -14,10 +15,10 @@ const { downloadInstagram } = require('../services/instagram');
  * }
  */
 async function handleDownload(req, res) {
-  const { url } = req.query;
+  const url = req.body?.url || req.query?.url;
 
   if (!url) {
-    return res.status(400).json({ success: false, error: 'Param ?url= es requerido' });
+    return res.status(400).json({ success: false, error: 'Param url es requerido (body.url o ?url=)' });
   }
 
   try {
