@@ -25,36 +25,43 @@ app.use((req, res, next) => {
 });
 
 // ── Rutas ─────────────────────────────────────────────────
-app.use('/api',        require('./routes/download'));
-app.use('/api/ai',     require('./routes/ai.route'));
-app.use('/api/image',  require('./routes/image.route'));
-app.use('/api/auth',   require('./routes/auth.route'));
-app.use('/api/keys',   require('./routes/keys.route'));
-app.use('/api/chats',  require('./routes/chats.route'));
+
+// API Pública — requiere x-api-key
+app.use('/api/ia',       require('./routes/ia.route'));
+app.use('/api/download', require('./routes/download'));
+app.use('/api/image',    require('./routes/image.route'));
+app.use('/api/auth',     require('./routes/auth.route'));
+app.use('/api/keys',     require('./routes/keys.route'));
+
+// Web Interna — requiere JWT Bearer (Dashboard)
+app.use('/chat',         require('./routes/chats.route'));
 
 // ── Health check ──────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     status:  'ok',
     message: 'API DevMatrixs 🚀',
-    version: '2.4.0',
+    version: '2.5.0',
     endpoints: {
-      ai_chat:        'POST   /api/ai/chat',
-      ai_models:      'GET    /api/ai/models',
+      // — API Pública (x-api-key) —
+      ia_chat:        'POST   /api/ia/chat',
+      ia_models:      'GET    /api/ia/models',
       image:          'POST   /api/image',
       download:       'POST   /api/download',
+      download_get:   'GET    /api/download?url=',
       auth_register:  'POST   /api/auth/register',
       auth_login:     'POST   /api/auth/login',
       auth_me:        'GET    /api/auth/me',
       keys_generate:  'POST   /api/keys/generate',
       keys_list:      'GET    /api/keys/list',
       keys_delete:    'DELETE /api/keys/:id',
-      chats_save:     'POST   /api/chats',
-      chats_list:     'GET    /api/chats',
-      chats_get:      'GET    /api/chats/:id',
-      chats_delete:   'DELETE /api/chats/:id',
+      // — Web Interna (JWT Bearer) —
+      chat_save:      'POST   /chat',
+      chat_list:      'GET    /chat',
+      chat_get:       'GET    /chat/:id',
+      chat_delete:    'DELETE /chat/:id',
     },
-    auth: 'Requiere x-api-key o JWT. Obtener en devmatrixs.lat/dashboard',
+    auth: 'API pública requiere x-api-key. Dashboard interno requiere JWT Bearer.',
   });
 });
 
@@ -64,5 +71,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 API DevMatrixs v2.4 corriendo en puerto ${PORT}`);
+  console.log(`🚀 API DevMatrixs v2.5 corriendo en puerto ${PORT}`);
 });
